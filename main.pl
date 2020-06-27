@@ -15,32 +15,10 @@ use Twitter::API;
 
 use File::Basename;
 use Scalar::Util 'blessed';
+use Module::Load;
 
-### Helper Functions
-# Recursively read a directory and add results to an array.
-sub rec_read_dir 
-{
-  my $d = shift;
-
-  my @files;
-
-  opendir(my $dh, $d) || die "Can't open directory $d: $!\n";
-  while (readdir $dh) {
-    next if substr($_,0,1) eq '.';
-
-    my $path = $d . '/' . $_;
-    if (-d $path) {
-      push @files, rec_read_dir($path);
-    } elsif (-f $path) {
-      if ($path =~ m/\.(pud)$/i) {
-        push @files, $path;
-      }
-    }
-  }
-  closedir($dh);
-
-  return @files;
-}
+# local helpers
+use Common;
 
 ###############################################################
 ### CODE
@@ -50,27 +28,24 @@ my %config = do "$RealBin/config.pl"
   or die "Couldn't read config.pl: $! $@";
 
 # Go find a map
-my @files = rec_read_dir('maps');
+my @files;
+if ($ARGV[0]) { @files = ( $ARGV[0] ) }
+else { @files = Common::readdir_recursive('maps') }
 
-my $file = $files[rand @files];
+my $result;
+while (! $result) {
+  # pick a map
+  my $file = $files[rand @files];
 
-my $cmd = './pud2bmp -x "' . $file . '"';
-print $cmd . "\n";
-my $result = `$cmd`;
-
-my $bmpname = $file . '.bmp';
-
-my $pngname = $file . '.png';
-unlink($pngname);
-
-#my $optipng = 'optipng -o7 -strip all -zm1-9 ' . $file . '.bmp';
-my $optipng = 'optipng -o1 -strip all "' . $bmpname . '"';
-print $optipng . "\n";
-`$optipng`;
-
-unlink($bmpname);
-
-# delete the BMP it's huge
+  # try a decode
+  if ($file =~ m/\.pud$/i) {
+    load 'Decoder::Warcraft2';
+    $result = Decoder::Warcraft2::render($file);
+  } elsif ($file =~ m/\.ota$/i) {
+    load 'Decoder::TotalAnnihilation';
+    $result = Decoder::TotalAnnihilation::render($file);
+  }
+}
 
 eval {
   # Connect to Twitter
@@ -87,7 +62,7 @@ eval {
   # Upload media image
   my $upload_return_object = $client->post('https://upload.twitter.com/1.1/media/upload.json', {
     media_category => 'tweet_image',
-    media => [ $pngname ], #'image.png', Content_Type => "image/png" ]
+    media => [ $result->{data} ], #'image.png', Content_Type => "image/png" ]
   });
 
   # Compose tweet.
@@ -96,22 +71,29 @@ eval {
 #  $nt->update({status => $post, media_ids => $upload_return_object->{media_id}});
   # post
 
-  my ($part1, $part2) = split /\n\n/, $result, 2;
-
   my $r = $client->post('statuses/update', {
-      status    => $part1,
+      status    => $result->{text},
       media_ids => $upload_return_object->{media_id},
   #    in_reply_to_status_id        => $last_id,
   #    auto_populate_reply_metadata => 'true'
   });
   my $last_id = $r->{id_str};
 
-  # followup with details
-  $client->post('statuses/update', {
-      status                       => $part2,
-      in_reply_to_status_id        => $last_id,
-      auto_populate_reply_metadata => 'true'
-  });
+  my @remaining = split /\n/, $result->{extra};
+  while (@remaining) {
+    my $m = '';
+    while (@remaining && length($m . "\n" . $remaining[0]) < 280) {
+      $m = $m . "\n" . shift(@remaining);
+    }
+
+    # followup with details
+    $r = $client->post('statuses/update', {
+        status                       => $m,
+        in_reply_to_status_id        => $last_id,
+        auto_populate_reply_metadata => 'true'
+    });
+    $last_id = $r->{id_str};
+  }
 };
 
 # error handling
@@ -122,3 +104,6 @@ if ( my $err = $@ ) {
        "HTTP Message......: ", $err->message, "\n",
        "Twitter error.....: ", $err->error, "\n";
 }
+
+# clean up
+unlink( $result->{data} );
