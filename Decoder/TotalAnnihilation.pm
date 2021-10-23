@@ -131,7 +131,7 @@ sub _tnt {
 #    for (my $y = 0; $y < 32; $y ++) {
     for (0 .. 31) {
       #$tnt{tileGfx}[$i][$y] = [ unpack('C[32]', read_bytes($fp, 32)) ];
-      push @{$tnt{tileGfx}[$i]}, [ unpack('C[32]', read_bytes($fp, 32)) ];
+      push @{$tnt{tileGfx}[$i]}, read_bytes($fp, 32);
     }
   }
 
@@ -268,6 +268,7 @@ sub render {
       }
     }
   }
+  delete $tnt->{mapFeature};
 
   # Next collect OTA mission features into the map.
   # First we need to select the schema to use.
@@ -375,10 +376,12 @@ FEATURE:
       my $t = 32 * $y;
       my $s = 32 * $x;
       for my $i (0 .. 31) {
-        push @{$image[$t + $i]}, @{$tnt->{tileGfx}[$tnt->{mapData}[$idx]][$i]};
+        $image[$t + $i] .= $tnt->{tileGfx}[$tnt->{mapData}[$idx]][$i];
       }
     }
   }
+  delete $tnt->{tileGfx};
+  delete $tnt->{mapData};
   if (DEBUG) { print STDERR "\n" }
 
   # blit all features, sorted left-to-right, back-to-front.
@@ -408,7 +411,7 @@ FEATURE:
     my $gaf_shad = $gafs_shad{$feature->{anim}};
     if ($gaf_shad) {
       if (DEBUG) { print STDERR "(shadow) " }
-      # shadow is a translucet blit:
+      # shadow is a translucent blit:
       #  find the new RGB values as (pixel1 + pixel2) / 2, then
       #  locate the nearest palette entry that matches and use that.
       my $t = (16 * $y) - $gaf_shad->{yPos} - int($height / 2) + $foot_y;
@@ -416,11 +419,12 @@ FEATURE:
       for (my $j = 0; $j < @{$gaf_shad->{data}}; $j ++) {
         next if ($j + $t < 0); last if ($j + $t >= @image);
         for (my $i = 0; $i < @{$gaf_shad->{data}[$j]}; $i ++) {
-          next if ($i + $s < 0); last if ($i + $s >= @{$image[$j + $t]});
+          next if ($i + $s < 0); last if ($i + $s >= length($image[$j + $t]));
+	  #if ($s+$i >= 10720) { die "failed while drawing" }
           my $pixel = $gaf_shad->{data}[$j][$i];
           if (defined $pixel && $pixel != $gaf_shad->{transparentIndex}) {
             # compute RGB blend of shadow + existing pxl
-            $image[$t+$j][$s+$i] = $alp->[$image[$t+$j][$s+$i]][$pixel];
+            substr($image[$t+$j], $s+$i, 1) = chr($alp->[ord(substr($image[$t+$j], $s+$i, 1))][$pixel])
           }
         }
       }
@@ -434,10 +438,11 @@ FEATURE:
       for (my $j = 0; $j < @{$gaf->{data}}; $j ++) {
         next if ($j + $t < 0); last if ($j + $t >= @image);
         for (my $i = 0; $i < @{$gaf->{data}[$j]}; $i ++) {
-          next if ($i + $s < 0); last if ($i + $s >= @{$image[$j + $t]});
+          next if ($i + $s < 0); last if ($i + $s >= length($image[$j + $t]));
+	  #if ($s+$i >= 10720) { die "failed while drawing" }
           my $pixel = $gaf->{data}[$j][$i];
           if (defined $pixel && $pixel != $gaf->{transparentIndex}) {
-            $image[$t+$j][$s+$i] = $pixel;
+            substr($image[$t+$j], $s+$i, 1) = chr($pixel);
           }
         }
       }
@@ -447,18 +452,18 @@ FEATURE:
 
   if (DEBUG) { print STDERR "Writing bitmap...\n" }
   my $bmp = Common::save_bmp($pal, \@image);
-  if (DEBUG) { print STDERR "Calling optipng...\n" }
-  my $png = Common::optipng( $bmp );
+  #if (DEBUG) { print STDERR "Calling optipng...\n" }
+  #my $png = Common::optipng( $bmp );
 
-  if (DEBUG) { print STDERR "Successfully rendered map: '$png'\n" }
+  if (DEBUG) { print STDERR "Successfully rendered map: '$bmp'\n" }
 
   # compose some info about the map
   $filename =~ s/^maps\/totala\///;
   my $desc = sprintf("TOTAL ANNIHILATION\nFilename: %s\nName: %s\nDescription: %s\nDimensions: %s\nPlayers: %s", $filename, $ota->{globalheader}{missionname}, $ota->{globalheader}{missiondescription}, $ota->{globalheader}{size}, $ota->{globalheader}{numplayers});
 
   return {
-    type => 'file',
-    data => $png,
+    type => 'bmp',
+    data => $bmp,
     text => $desc,
     extra => ''
   };

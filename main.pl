@@ -47,10 +47,35 @@ while (! $result) {
   }
 }
 
+# try to make a png first
+my $upload_file = Common::optipng($result->{data});
+
+# Twitter rejects uploads over 5mb, so if the png is too large, try making a jpeg instead
+if (-s $upload_file > 5_000_000) {
+  unlink($upload_file);
+  print STDERR "File too large, attempting shrink.\n";
+  my $new_bmp = Common::shrink_bmp( $result->{data} );
+  unlink($result->{data}); $result->{data} = $new_bmp;
+
+  print STDERR "Calling optipng on new file.\n";
+  $upload_file = Common::optipng($result->{data});
+  #$upload_file = $result->{data} . '.jpg';
+  #`convert -define registry:temporary-path=/var/tmp $result->{data} -resize 4096x4096 $upload_file`;
+}
+
+my $q = 100;
+while (-s $upload_file > 5_000_000) {
+  print STDERR "Rejecting $upload_file because it is >5M (" . (-s $upload_file) . ")\n";
+  unlink($upload_file);
+  $upload_file = Common::cjpeg($result->{data}, $q);
+  $q -= 5;
+}
+print STDERR "Uploading $upload_file (" . (-s $upload_file) . ")\n";
+
 eval {
   # Connect to Twitter
   my $client = Twitter::API->new_with_traits(
-    traits          => qw( NormalizeBooleans DecodeHtmlEntities RetryOnError ),
+    traits          => [ qw( NormalizeBooleans DecodeHtmlEntities RetryOnError ) ],
     consumer_key    => $config{consumer_key},
     consumer_secret => $config{consumer_secret},
     access_token    => $config{access_token},
@@ -62,7 +87,7 @@ eval {
   # Upload media image
   my $upload_return_object = $client->post('https://upload.twitter.com/1.1/media/upload.json', {
     media_category => 'tweet_image',
-    media => [ $result->{data} ], #'image.png', Content_Type => "image/png" ]
+    media => [ $upload_file ], #'image.png', Content_Type => "image/png" ]
   });
 
   # Compose tweet.
@@ -106,4 +131,5 @@ if ( my $err = $@ ) {
 }
 
 # clean up
+unlink( $upload_file );
 unlink( $result->{data} );
