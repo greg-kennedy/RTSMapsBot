@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define TRUCOLOR 1
 
@@ -596,7 +597,7 @@ struct grpframe
   unsigned char *data;
 };
 
-unsigned char setname[10];
+char setname[10];
 unsigned char tileset;
 unsigned short mapx, mapy;
 unsigned short *tilemap;
@@ -623,14 +624,15 @@ struct grpframe *loadGRP(unsigned char type) // braindead GRP loader for first f
   struct grpframe *tmp = NULL;
   FILE *fGRP = NULL;
 
-  strcpy(buffer,"art/unit/");
-  if (tileset == 1 && snownames[type] != NULL) strcat(buffer,snownames[type]);
-  else if (tileset == 2 && wastenames[type] != NULL) strcat(buffer,wastenames[type]);
-  else if (tileset == 3 && xswampnames[type] != NULL) strcat(buffer,xswampnames[type]);
-  else strcat(buffer,basenames[type]);
+  char filename[256];
+  strcpy(filename,"art/unit/");
+  if (tileset == 1 && snownames[type] != NULL) strcat(filename,snownames[type]);
+  else if (tileset == 2 && wastenames[type] != NULL) strcat(filename,wastenames[type]);
+  else if (tileset == 3 && xswampnames[type] != NULL) strcat(filename,xswampnames[type]);
+  else strcat(filename,basenames[type]);
 
-  fGRP = fopen(buffer,"rb");
-  if (fGRP == NULL) { fprintf(stderr,"ERROR: Couldn't open %s...\n",buffer); return NULL; }
+  fGRP = fopen(filename,"rb");
+  if (fGRP == NULL) { fprintf(stderr,"ERROR: Couldn't open %s...\n",filename); return NULL; }
 
   tmp = (struct grpframe *)malloc(sizeof(struct grpframe));
 //  int debug=0;
@@ -710,10 +712,10 @@ xpos = xoff; ypos = 0;
   return tmp;
 }
 
-unsigned int drawunit(unsigned short u_x,unsigned short u_y,unsigned char type,unsigned char owner)
+void drawunit(unsigned short u_x,unsigned short u_y,unsigned char type,unsigned char owner)
 {
   long i,j,xpos,ypos,imgindex;
-  unsigned char mipixel,ispstart;
+  unsigned char mipixel;
   if (unitimgs[type] == NULL) unitimgs[type] = loadGRP(type);
   
   if (type == 0x16 || type == 0x23 || type == 0x28 || type == 0x29 || type == 0x2A || type == 0x2B || type == 0x38) 
@@ -849,14 +851,15 @@ unsigned int loadTileset()
   }
   fprintf(stderr,"Info: Map uses tileset %s\n",setname);
 
-  sprintf(buffer,"art/bgs/%s/%s.cv4",setname,setname);
-  fCV4 = fopen(buffer,"rb");
-  sprintf(buffer,"art/bgs/%s/%s.ppl",setname,setname);
-  fPPL = fopen(buffer,"rb");
-  sprintf(buffer,"art/bgs/%s/%s.vr4",setname,setname);
-  fVR4 = fopen(buffer,"rb");
-  sprintf(buffer,"art/bgs/%s/%s.vx4",setname,setname);
-  fVX4 = fopen(buffer,"rb");
+  char filename[256];
+  sprintf(filename,"art/bgs/%s/%s.cv4",setname,setname);
+  fCV4 = fopen(filename,"rb");
+  sprintf(filename,"art/bgs/%s/%s.ppl",setname,setname);
+  fPPL = fopen(filename,"rb");
+  sprintf(filename,"art/bgs/%s/%s.vr4",setname,setname);
+  fVR4 = fopen(filename,"rb");
+  sprintf(filename,"art/bgs/%s/%s.vx4",setname,setname);
+  fVX4 = fopen(filename,"rb");
   
   if (fCV4 == NULL || fPPL == NULL || fVR4 == NULL || fVX4 == NULL)
   {
@@ -916,9 +919,9 @@ unsigned int loadTileset()
   return 0;
 }
 
-int getGRPFrame()
+/*int getGRPFrame()
 {
-}
+}*/
 
 int main(int argc, char *argv[])
 {
@@ -926,7 +929,7 @@ int main(int argc, char *argv[])
   unsigned char buffer[80];
   unsigned long length,i,j;
   
-  unsigned char filename[80],desc[32];
+  char filename[80],desc[32];
   
                                            //filesize
   unsigned char bmpheader[] = {0x42, 0x4D, 0,0,0,0, 0,0, 0,0, 0x36,0,0,0,
@@ -950,16 +953,17 @@ int main(int argc, char *argv[])
     fPUD = fopen(filename,"rb");
     if (fPUD == NULL) { fprintf(stderr,"ERROR: Problem opening %s...\n",filename); return 1; }
 
-    sprintf(buffer,"%s.bmp",filename);
-    fBMP = fopen(buffer,"wb");
-    if (fBMP == NULL) { fprintf(stderr,"ERROR: Problem opening %s...\n",buffer); fclose(fPUD); return 1; }
+    char bmpname[256];
+    sprintf(bmpname,"%s.bmp",filename);
+    fBMP = fopen(bmpname,"wb");
+    if (fBMP == NULL) { fprintf(stderr,"ERROR: Problem opening %s...\n",bmpname); fclose(fPUD); return 1; }
 
     while (!feof(fPUD)) {
       fread(buffer,1,4,fPUD);
       fread(&length,4,1,fPUD);
-      if (strncmp(buffer,"TYPE",4) == 0) {
+      if (memcmp(buffer,"TYPE",4) == 0) {
         fread(buffer,1,9,fPUD);
-        if (strncmp(buffer,"WAR2 MAP",9) != 0) {
+        if (memcmp(buffer,"WAR2 MAP",9) != 0) {
           fprintf(stderr,"ERROR: Map type is invalid (%s) - damaged PUD?\n",buffer);
           fclose(fPUD);
           fclose(fBMP);
@@ -967,13 +971,13 @@ int main(int argc, char *argv[])
         }
         fread(buffer,1,7,fPUD);
         fprintf(stderr,"Info: Map type is \"WAR2 MAP\"\nInfo: Map ID is \"%s\"\n",buffer);
-      } else if (strncmp(buffer,"VER ",4) == 0) {
+      } else if (memcmp(buffer,"VER ",4) == 0) {
         fread(buffer,1,2,fPUD);
         fprintf(stderr,"Info: Map is PUD version $%x\n",buffer[0] + 256 * buffer[1]);
-      } else if (strncmp(buffer,"DESC",4) == 0) {
+      } else if (memcmp(buffer,"DESC",4) == 0) {
         fread(desc,1,32,fPUD);
         fprintf(stderr,"Info: Map description is \"%s\"\n",desc);
-      } else if (strncmp(buffer,"OWNR",4) == 0) {
+      } else if (memcmp(buffer,"OWNR",4) == 0) {
         for (i = 0; i < 8; i++)
         {
           fread(&players[i].controller,1,1,fPUD);
@@ -981,18 +985,18 @@ int main(int argc, char *argv[])
         }
         fseek(fPUD,7,SEEK_CUR);
         fread(&players[8].controller,1,1,fPUD);
-      } else if (strncmp(buffer,"ERA ",4) == 0) {
+      } else if (memcmp(buffer,"ERA ",4) == 0) {
         fread(buffer,1,2,fPUD);
         tileset = buffer[0] + 256 * buffer[1];
         if (tileset > 0x03) tileset = 0;
 //        if (loadTileset()) { fclose(fPUD); fclose(fBMP); return 1; }
         fprintf(stderr,"Info: Map tileset is %u\n",tileset);
-      } else if (strncmp(buffer,"ERAX",4) == 0) {
+      } else if (memcmp(buffer,"ERAX",4) == 0) {
         fread(buffer,1,2,fPUD);
         tileset = buffer[0] + 256 * buffer[1];
         if (tileset > 0x03) tileset = 0;
         fprintf(stderr,"Info: Map tilesetX is %u\n",tileset);
-      } else if (strncmp(buffer,"DIM ",4) == 0) {
+      } else if (memcmp(buffer,"DIM ",4) == 0) {
         fread(buffer,1,2,fPUD);
         mapx = buffer[0] + 256 * buffer[1];
         fread(buffer,1,2,fPUD);
@@ -1000,30 +1004,30 @@ int main(int argc, char *argv[])
         tilemap = (unsigned short *) malloc (mapy*mapx * sizeof(unsigned short));
         if (tilemap == NULL) { fprintf(stderr,"ERROR: out of memory allocating tilemap.\n"); return 1; }
         fprintf(stderr,"Info: Map dimensions are %u x %u\n",mapx,mapy);
-      } else if (strncmp(buffer,"UDTA",4) == 0) {
+      } else if (memcmp(buffer,"UDTA",4) == 0) {
         fread(buffer,1,2,fPUD);
         if (buffer[0] == 0)
           fprintf(stderr,"Info: Map contains custom unit data.\n");
         else
           fprintf(stderr,"Info: Map uses default unit data.\n");
         fseek(fPUD,length-2,SEEK_CUR);
-      } else if (strncmp(buffer,"ALOW",4) == 0) {
+      } else if (memcmp(buffer,"ALOW",4) == 0) {
         //don't care much about this now, although it may be interesting
         // to note in map info
         fseek(fPUD,length,SEEK_CUR);
-      } else if (strncmp(buffer,"UGRD",4) == 0) {
+      } else if (memcmp(buffer,"UGRD",4) == 0) {
         fread(buffer,1,2,fPUD);
         if (buffer[0] == 0)
           fprintf(stderr,"Info: Map contains custom upgrade data.\n");
         else
           fprintf(stderr,"Info: Map uses default upgrade data.\n");
         fseek(fPUD,length-2,SEEK_CUR);
-      } else if (strncmp(buffer,"SIDE",4) == 0) {
+      } else if (memcmp(buffer,"SIDE",4) == 0) {
         for (i = 0; i < 8; i++)
           fread(&players[i].race,1,1,fPUD);
         fseek(fPUD,7,SEEK_CUR);
         fread(&players[8].race,1,1,fPUD);
-      } else if (strncmp(buffer,"SGLD",4) == 0) {
+      } else if (memcmp(buffer,"SGLD",4) == 0) {
         for (i = 0; i < 8; i++)
         {
           fread(buffer,1,2,fPUD);
@@ -1032,7 +1036,7 @@ int main(int argc, char *argv[])
         fseek(fPUD,14,SEEK_CUR);
         fread(buffer,1,2,fPUD);
         players[8].gold = buffer[0] + 256 * buffer[1];
-      } else if (strncmp(buffer,"SLBR",4) == 0) {
+      } else if (memcmp(buffer,"SLBR",4) == 0) {
         for (i = 0; i < 8; i++)
         {
           fread(buffer,1,2,fPUD);
@@ -1041,7 +1045,7 @@ int main(int argc, char *argv[])
         fseek(fPUD,14,SEEK_CUR);
         fread(buffer,1,2,fPUD);
         players[8].lumber = buffer[0] + 256 * buffer[1];
-      } else if (strncmp(buffer,"SOIL",4) == 0) {
+      } else if (memcmp(buffer,"SOIL",4) == 0) {
         for (i = 0; i < 8; i++)
         {
           fread(buffer,1,2,fPUD);
@@ -1050,28 +1054,28 @@ int main(int argc, char *argv[])
         fseek(fPUD,14,SEEK_CUR);
         fread(buffer,1,2,fPUD);
         players[8].oil = buffer[0] + 256 * buffer[1];
-      } else if (strncmp(buffer,"AIPL",4) == 0) {
+      } else if (memcmp(buffer,"AIPL",4) == 0) {
         // Don't care much about AI info
         fseek(fPUD,length,SEEK_CUR);
-      } else if (strncmp(buffer,"MTXM",4) == 0) {
+      } else if (memcmp(buffer,"MTXM",4) == 0) {
 //        fread(tilemap,1,mapx*mapy*2,fPUD);
           for (i=0; i<mapx*mapy; i++) {
             fread(buffer,1,2,fPUD);
             tilemap[i] = buffer[0] + 256 * buffer[1];
           }        
-      } else if (strncmp(buffer,"SQM ",4) == 0) {
+      } else if (memcmp(buffer,"SQM ",4) == 0) {
         // Don't care much about movement map info
         fseek(fPUD,length,SEEK_CUR);
-      } else if (strncmp(buffer,"OILM",4) == 0) {
+      } else if (memcmp(buffer,"OILM",4) == 0) {
         // Oil map info is completely unused
         fseek(fPUD,length,SEEK_CUR);
-      } else if (strncmp(buffer,"REGM",4) == 0) {
+      } else if (memcmp(buffer,"REGM",4) == 0) {
         // Don't care much about action map info
         fseek(fPUD,length,SEEK_CUR);
-      } else if (strncmp(buffer,"UNIT",4) == 0) {
+      } else if (memcmp(buffer,"UNIT",4) == 0) {
         num_units = length / 8;
         units = (struct unit*)malloc(sizeof(struct unit) * num_units);
-        fprintf(stderr,"Info: Map contains %u units.\n",num_units);
+        fprintf(stderr,"Info: Map contains %lu units.\n",num_units);
         for (i=0; i<num_units; i++) {
           fread(buffer,1,2,fPUD);
           units[i].x = buffer[0] + 256 * buffer[1];
@@ -1082,7 +1086,7 @@ int main(int argc, char *argv[])
           fread(buffer,1,2,fPUD);
           units[i].arg = buffer[0] + 256 * buffer[1];
         }
-      } else if (strncmp(buffer,"SIGN",4) == 0) {
+      } else if (memcmp(buffer,"SIGN",4) == 0) {
         fread(buffer,1,4,fPUD);
         fprintf(stderr,"Info: Map has official signature %08x\n",*buffer);
       } else {
@@ -1208,14 +1212,14 @@ int main(int argc, char *argv[])
     else if (tileset == 0x03) strcpy(setname,"Draenor");
     else strcpy(setname,"Forest");
 
-    printf("Filename:    %s\nDescription: %s\nDimensions:  %u x %u\nTerrain:     %s\nPlayers:     %u\n\n",filename,desc,mapx,mapy,setname,numplayers,players[0].gold,players[0].lumber,players[0].oil);
+    printf("Filename:    %s\nDescription: %s\nDimensions:  %u x %u\nTerrain:     %s\nPlayers:     %u\n\n",filename,desc,mapx,mapy,setname,numplayers);
 
     char *colors[] = {"Red","Blue","Green","Purple","Orange","Black","White","Yellow"};
     char *controllers[] = {"Computer","Computer","Computer","Nobody","Computer","Person","Rescue","Rescue"};
     
     for (i=0; i<8; i++)
     {
-        if (players[i].present) printf("Player %u (%s) %s - %s\n  (G=%u  L=%u  O=%u)\n\n",i+1,colors[i],controllers[players[i].controller % 0x08],(players[i].race==0x00?"Human":"Orc"),players[i].gold,players[i].lumber,players[i].oil);
+        if (players[i].present) printf("Player %lu (%s) %s - %s\n  (G=%u  L=%u  O=%u)\n\n",i+1,colors[i],controllers[players[i].controller % 0x08],(players[i].race==0x00?"Human":"Orc"),players[i].gold,players[i].lumber,players[i].oil);
     }
     return 0;
   }
